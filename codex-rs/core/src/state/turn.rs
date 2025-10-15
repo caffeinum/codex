@@ -42,6 +42,13 @@ impl TaskKind {
             TaskKind::Compact => "compact",
         }
     }
+
+    pub(crate) fn history_key(self) -> &'static str {
+        match self {
+            TaskKind::Regular | TaskKind::Compact => "main",
+            TaskKind::Review => "review",
+        }
+    }
 }
 
 #[derive(Clone)]

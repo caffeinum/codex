@@ -42,17 +42,18 @@ impl SessionState {
         self.history.replace(items);
     }
 
-    pub(crate) fn clear_review_thread(&mut self) {
-        self.history.clear_review_thread();
+    pub(crate) fn clear_task_history(&mut self, task_kind: TaskKind) {
+        self.history.clear_task_history(task_kind);
     }
 
-    pub(crate) fn initialize_review_history(
+    pub(crate) fn initialize_task_history(
         &mut self,
+        task_kind: TaskKind,
         response_input: &ResponseInputItem,
         initial_context: Vec<ResponseItem>,
     ) {
         self.history
-            .initialize_review_history(response_input, initial_context);
+            .initialize_task_history(task_kind, response_input, initial_context);
     }
 
     pub(crate) fn prepare_prompt_input(
@@ -60,10 +61,10 @@ impl SessionState {
         task_kind: TaskKind,
         pending_input: Vec<ResponseItem>,
     ) -> Vec<ResponseItem> {
+        self.history.handle_missing_tool_call_output(task_kind);
         if !pending_input.is_empty() {
             self.history.add_pending_input(pending_input, task_kind);
         }
-        self.history.handle_missing_tool_call_output(task_kind);
         self.history.prompt(task_kind)
     }
 
@@ -100,4 +101,51 @@ impl SessionState {
     }
 
     // Pending input/approval moved to TurnState.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codex_protocol::models::ContentItem;
+    use pretty_assertions::assert_eq;
+
+    fn user_message(text: &str) -> ResponseItem {
+        ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::OutputText {
+                text: text.to_string(),
+            }],
+        }
+    }
+
+    #[test]
+    fn prepare_prompt_input_inserts_missing_output_before_pending_input() {
+        let mut state = SessionState::default();
+        let call_id = "call-1".to_string();
+        let tool_call = ResponseItem::CustomToolCall {
+            id: None,
+            status: None,
+            call_id: call_id.clone(),
+            name: "example".to_string(),
+            input: "{}".to_string(),
+        };
+
+        state.record_items(std::iter::once(tool_call.clone()), TaskKind::Regular);
+
+        let pending_user = user_message("follow-up");
+        let prompt = state.prepare_prompt_input(TaskKind::Regular, vec![pending_user.clone()]);
+
+        assert_eq!(
+            prompt,
+            vec![
+                tool_call,
+                ResponseItem::CustomToolCallOutput {
+                    call_id,
+                    output: "aborted".to_string(),
+                },
+                pending_user,
+            ]
+        );
+    }
 }

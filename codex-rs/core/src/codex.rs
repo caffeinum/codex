@@ -683,7 +683,7 @@ impl Session {
 
     async fn clear_review_thread(&self) {
         let mut state = self.state.lock().await;
-        state.clear_review_thread();
+        state.clear_task_history(TaskKind::Review);
     }
 
     fn reconstruct_history_from_rollout(
@@ -847,7 +847,7 @@ impl Session {
             }
             TaskKind::Review => {
                 let mut state = self.state.lock().await;
-                state.initialize_review_history(response_input, initial_context);
+                state.initialize_task_history(task_kind, response_input, initial_context);
             }
         }
     }
